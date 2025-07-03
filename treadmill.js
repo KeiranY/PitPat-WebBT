@@ -21,6 +21,9 @@ const speedDownBtn = document.getElementById('speedDownBtn');
 const speedSlider = document.getElementById('speedSlider');
 const sliderValue = document.getElementById('sliderValue');
 const statusChip = document.getElementById('statusChip');
+const loadingOverlay = document.getElementById('loadingOverlay');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const countdownNumber = document.getElementById('countdownNumber');
 
 // --- State ---
 let device = null;
@@ -126,6 +129,7 @@ function send_data(packet) {
 async function connectBluetooth() {
     hideAlert();
     setStatus('Connecting');
+    if (loadingOverlay) loadingOverlay.style.display = 'flex';
     try {
         console.log("Requesting Bluetooth device...");
         device = await navigator.bluetooth.requestDevice({
@@ -173,12 +177,14 @@ async function connectBluetooth() {
         connectBtn.textContent = "Disconnect";
         updateRunningState(3);
         // No heartbeat loop, just send heartbeat or data on notification
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
     } catch (err) {
         console.error("Bluetooth connection error:", err);
         showAlert("Bluetooth error: " + err);
         setStatus('Disconnected');
         connected = false;
         connectBtn.textContent = "Connect";
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
         // stopHeartbeatLoop();
     }
 }
@@ -187,7 +193,7 @@ function disconnectBluetooth() {
     if (device && device.gatt.connected) {
         device.gatt.disconnect();
     }
-    // No heartbeat loop to stop
+    if (loadingOverlay) loadingOverlay.style.display = 'none';
     setStatus('Disconnected');
 }
 
@@ -334,11 +340,40 @@ connectBtn.addEventListener('click', () => {
     else disconnectBluetooth();
 });
 
-startBtn.addEventListener('click', () => {
+startBtn.addEventListener('click', async () => {
     if (!connected) return;
     if (runningState === 1) { // Running -> Pause
         send_data(makePacket("pause"));
     } else { // Start
+        // Show countdown overlay (visual only, do not delay command)
+        if (countdownOverlay && countdownNumber) {
+            countdownOverlay.style.display = 'flex';
+            countdownOverlay.style.opacity = '1';
+            let count = 3;
+            countdownNumber.textContent = count;
+            countdownNumber.style.opacity = '1';
+            countdownNumber.style.transform = 'scale(1)';
+            // Animate countdown in background
+            (async () => {
+                for (let i = 0; i < 3; i++) {
+                    await new Promise(res => setTimeout(res, 700));
+                    countdownNumber.style.transform = 'scale(1.3)';
+                    countdownNumber.style.opacity = '0.5';
+                    await new Promise(res => setTimeout(res, 200));
+                    count--;
+                    if (count > 0) {
+                        countdownNumber.textContent = count;
+                        countdownNumber.style.opacity = '1';
+                        countdownNumber.style.transform = 'scale(1)';
+                    }
+                }
+                await new Promise(res => setTimeout(res, 400));
+                countdownOverlay.style.opacity = '0';
+                await new Promise(res => setTimeout(res, 500)); // Wait for fade-out
+                countdownOverlay.style.display = 'none';
+                countdownOverlay.style.opacity = '1'; // Reset for next time
+            })();
+        }
         send_data(makePacket("start", curTargetSpeed));
     }
 });

@@ -216,6 +216,14 @@
             <input type="range" id="speedSlider" min="1" max="6" step="0.1" value="1" class="mdl-slider mdl-js-slider">
         </div>
     </div>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(255,255,255,0.7);z-index:9999;align-items:center;justify-content:center;">
+        <div class="mdl-spinner mdl-js-spinner is-active" style="width:64px;height:64px;"></div>
+    </div>
+    <!-- Countdown Overlay -->
+    <div id="countdownOverlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(33,33,33,0.85);z-index:10000;align-items:center;justify-content:center;opacity:1;transition:opacity 0.5s;">
+        <span id="countdownNumber" style="color:#fff;font-size:6em;font-weight:bold;transition:transform 0.3s, opacity 0.3s;">3</span>
+    </div>
     <script src="treadmill.js"></script>
 </body>
 </html>
