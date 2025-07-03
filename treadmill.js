@@ -74,8 +74,14 @@ function updateDashboard(data) {
     speedDiv.textContent = data.speed || '-';
     distanceDiv.textContent = data.distance || '-';
     caloriesDiv.textContent = data.calories || '-';
-    stepsDiv.textContent = data.steps || '-';
-    durationDiv.textContent = data.duration || '-';
+    stepsDiv.textContent = (data.steps !== undefined && data.steps !== null) ? data.steps : '-';
+    if (data.duration && typeof data.duration === 'number') {
+        durationDiv.textContent = formatDuration(data.duration);
+    } else if (typeof data.duration === 'string' && !isNaN(parseFloat(data.duration))) {
+        durationDiv.textContent = formatDuration(parseFloat(data.duration));
+    } else {
+        durationDiv.textContent = data.duration || '-';
+    }
 }
 function enableControls(enable) {
     startBtn.disabled = !enable;
@@ -117,6 +123,17 @@ function updateRunningState(state) {
                 setStatus('Disconnected');
         }
     }
+}
+function formatDuration(seconds) {
+    seconds = Math.floor(seconds);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    let parts = [];
+    if (h > 0) parts.push(h + 'h');
+    if (m > 0 || h > 0) parts.push(m + 'm');
+    parts.push(s + 's');
+    return parts.join(' ');
 }
 
 // --- Send Data Logic (replaces sendCommand) ---
@@ -256,7 +273,7 @@ function handleNotification(event) {
         distance: (distance / 1000).toFixed(2) + " " + distance_unit,
         calories: calories + " kcal",
         steps: steps,
-        duration: (duration / 1000).toFixed(1) + " s",
+        duration: Math.round(duration / 1000),
         status: statusArr[running_state] || "Unknown"
     };
     // Log parsed fields
