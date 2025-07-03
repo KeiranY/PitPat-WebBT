@@ -24,6 +24,62 @@ const statusChip = document.getElementById('statusChip');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const countdownOverlay = document.getElementById('countdownOverlay');
 const countdownNumber = document.getElementById('countdownNumber');
+const historyTableBody = document.getElementById('historyTableBody');
+
+// --- Session History Logic ---
+let sessionActive = false;
+let sessionStartData = null;
+let lastSession = null;
+
+function loadSessions() {
+    let sessions = [];
+    try {
+        sessions = JSON.parse(localStorage.getItem('treadmill_sessions') || '[]');
+    } catch {}
+    return Array.isArray(sessions) ? sessions : [];
+}
+function saveSessions(sessions) {
+    localStorage.setItem('treadmill_sessions', JSON.stringify(sessions));
+}
+function addSession(session) {
+    const sessions = loadSessions();
+    sessions.unshift(session); // newest first
+    saveSessions(sessions);
+    renderSessionTable();
+}
+function deleteSession(idx) {
+    const sessions = loadSessions();
+    sessions.splice(idx, 1);
+    saveSessions(sessions);
+    renderSessionTable();
+}
+function renderSessionTable() {
+    const sessions = loadSessions();
+    historyTableBody.innerHTML = '';
+    sessions.forEach((s, i) => {
+        let avgSpeedDisplay = '-';
+        if (typeof s.avgSpeed === 'number' && !isNaN(s.avgSpeed)) {
+            avgSpeedDisplay = s.avgSpeed.toFixed(2) + ' ' + (s.speedUnit || '');
+        } else if (typeof s.avgSpeed === 'string' && !isNaN(parseFloat(s.avgSpeed))) {
+            avgSpeedDisplay = parseFloat(s.avgSpeed).toFixed(2) + ' ' + (s.speedUnit || '');
+        }
+        let dateStr = '-';
+        if (typeof s.date === 'number' || typeof s.date === 'string') {
+            dateStr = dateFns.formatRelative(new Date(s.date), new Date());
+        }
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${dateStr}</td>
+            <td>${formatDuration(s.duration)}</td>
+            <td>${s.steps}</td>
+            <td>${s.calories}</td>
+            <td>${avgSpeedDisplay}</td>
+            <td><button class="mdl-button mdl-js-button mdl-button--icon" title="Delete" onclick="window.deleteSessionFromTable(${i})"><i class="material-icons">delete</i></button></td>
+        `;
+        historyTableBody.appendChild(tr);
+    });
+}
+window.deleteSessionFromTable = deleteSession;
 
 // --- State ---
 let device = null;
@@ -219,6 +275,9 @@ function onDisconnected() {
     setStatus('Disconnected');
     connectBtn.textContent = "Connect";
     updateRunningState(3);
+    if (sessionActive && sessionStartData) {
+        finishSession('Disconnected');
+    }
 }
 
 function handleNotification(event) {
@@ -242,6 +301,10 @@ function handleNotification(event) {
         };
         updateDashboard(treadmillData);
         updateRunningState(3);
+        // If session was active, save it as ended due to disconnect/invalid
+        if (sessionActive && sessionStartData) {
+            finishSession('Disconnected');
+        }
         return;
     }
     // Helper to read unsigned int from bytes
@@ -274,12 +337,60 @@ function handleNotification(event) {
         calories: calories + " kcal",
         steps: steps,
         duration: Math.round(duration / 1000),
-        status: statusArr[running_state] || "Unknown"
+        status: statusArr[running_state] || "Unknown",
+        _raw: { current_speed, distance, calories, steps, duration, speed_unit }
     };
     // Log parsed fields
     console.log("Parsed treadmill data:", treadmillData);
     updateDashboard(treadmillData);
     updateRunningState(running_state);
+
+    // --- Session tracking logic ---
+    if (running_state === 1 && !sessionActive) {
+        // Session started
+        sessionActive = true;
+        sessionStartData = {
+            date: Date.now(),
+            steps: steps,
+            calories: calories,
+            distance: distance,
+            duration: Math.round(duration / 1000),
+            speedSum: current_speed,
+            speedCount: 1,
+            speedUnit: speed_unit
+        };
+        // Save as first session
+        const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+        upsertLiveSession({
+            date: sessionStartData.date,
+            duration: sessionStartData.duration,
+            steps: sessionStartData.steps,
+            calories: sessionStartData.calories + ' kcal',
+            avgSpeed: avgSpeed,
+            speedUnit: sessionStartData.speedUnit || ''
+        });
+    } else if (running_state === 1 && sessionActive && sessionStartData) {
+        // Update session stats
+        sessionStartData.steps = steps;
+        sessionStartData.calories = calories;
+        sessionStartData.distance = distance;
+        sessionStartData.duration = Math.round(duration / 1000);
+        sessionStartData.speedSum += current_speed;
+        sessionStartData.speedCount += 1;
+        // Update first session in treadmill_sessions
+        const avgSpeed = (sessionStartData.speedSum / sessionStartData.speedCount) / 1000;
+        upsertLiveSession({
+            date: sessionStartData.date,
+            duration: sessionStartData.duration,
+            steps: sessionStartData.steps,
+            calories: sessionStartData.calories + ' kcal',
+            avgSpeed: avgSpeed,
+            speedUnit: sessionStartData.speedUnit || ''
+        });
+    } else if ((running_state === 3 || running_state === 2) && sessionActive && sessionStartData) {
+        // Session ended (Stopped or Paused)
+        finishSession(running_state === 3 ? 'Stopped' : 'Paused');
+    }
 
     // --- Heartbeat/data send logic, like _notification_handler ---
     if (writeChar) {
@@ -425,3 +536,40 @@ speedSlider.addEventListener('change', () => {
 updateDashboard({});
 updateRunningState(3);
 sliderValue.textContent = speedSlider.value;
+renderSessionTable();
+
+function saveCurrentSession(session) {
+    localStorage.setItem('treadmill_current_session', JSON.stringify(session));
+}
+function loadCurrentSession() {
+    try {
+        return JSON.parse(localStorage.getItem('treadmill_current_session')) || null;
+    } catch { return null; }
+}
+function clearCurrentSession() {
+    localStorage.removeItem('treadmill_current_session');
+}
+
+function upsertLiveSession(session) {
+    let sessions = loadSessions();
+    if (sessions.length > 0 && sessions[0] && sessions[0].date === session.date) {
+        sessions[0] = session;
+    } else {
+        sessions.unshift(session);
+    }
+    saveSessions(sessions);
+    renderSessionTable();
+}
+
+function finishSession(reason) {
+    sessionActive = false;
+    sessionStartData = null;
+    // No need to do anything else, as the session is already up-to-date in treadmill_sessions
+}
+
+// On page load, check for an unfinished session and restore it if present
+const restored = loadCurrentSession();
+if (restored && !sessionActive) {
+    sessionActive = true;
+    sessionStartData = restored;
+}
