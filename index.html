@@ -92,8 +92,6 @@
         .slider-group { margin: 1em 0; width: 100%; max-width: 400px; }
         .slider-label { margin-bottom: 0.5em; display: block; }
         #status { margin-top: 1em; text-align: center; }
-        .alert { background: #f8d7da; color: #721c24; padding: 0.7em 1em; border-radius: 5px; margin-bottom: 1em; display: none; }
-        .alert.open { display: block; }
         .mdl-slider { width: 100%; max-width: 300px; }
         .mdl-textfield { flex: 1; }
         .btn-red {
@@ -193,7 +191,6 @@
         <main class="mdl-layout__content">
             <section class="mdl-layout__tab-panel is-active" id="controls-panel">
                 <div class="center-container">
-                    <div id="alert" class="alert"></div>
                     <div class="controls">
                         <button id="connectBtn" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--primary">Connect</button>
                     </div>
@@ -237,6 +234,11 @@
             </section>
             <section class="mdl-layout__tab-panel" id="history-panel">
                 <div class="center-container">
+                    <div style="display:flex;justify-content:center;gap:0.5em;margin-bottom:0.5em;width:100%;max-width:700px;">
+                        <button id="exportHistoryBtn" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect">Export</button>
+                        <button id="importHistoryBtn" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect">Import</button>
+                        <input type="file" id="importHistoryInput" accept="application/json" style="display:none;" />
+                    </div>
                     <div class="history-table-container">
                         <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp" >
                             <thead>
@@ -265,6 +267,11 @@
     <!-- Countdown Overlay -->
     <div id="countdownOverlay" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(33,33,33,0.85);z-index:10000;align-items:center;justify-content:center;opacity:1;transition:opacity 0.5s;">
         <span id="countdownNumber" style="color:#fff;font-size:6em;font-weight:bold;transition:transform 0.3s, opacity 0.3s;">3</span>
+    </div>
+    <!-- Snackbar for toast messages -->
+    <div id="snackbar" class="mdl-js-snackbar mdl-snackbar">
+        <div class="mdl-snackbar__text"></div>
+        <button class="mdl-snackbar__action" type="button"></button>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
     <script src="treadmill.js"></script>

@@ -7,7 +7,6 @@ const WRITE_CHAR_UUID = "0000fba1-0000-1000-8000-00805f9b34fb";
 
 // --- UI Elements ---
 const connectBtn = document.getElementById('connectBtn');
-const alertDiv = document.getElementById('alert');
 const statusDiv = document.getElementById('status');
 const speedDiv = document.getElementById('speed');
 const distanceDiv = document.getElementById('distance');
@@ -25,6 +24,10 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const countdownOverlay = document.getElementById('countdownOverlay');
 const countdownNumber = document.getElementById('countdownNumber');
 const historyTableBody = document.getElementById('historyTableBody');
+const importHistoryBtn = document.getElementById('importHistoryBtn');
+const exportHistoryBtn = document.getElementById('exportHistoryBtn');
+const importHistoryInput = document.getElementById('importHistoryInput');
+const snackbar = document.getElementById('snackbar');
 
 // --- Session History Logic ---
 let sessionActive = false;
@@ -92,13 +95,7 @@ let runningState = 3; // 0: Starting, 1: Running, 2: Paused, 3: Stopped
 let curTargetSpeed = 1000; // in treadmill units
 
 // --- Helper Functions ---
-function showAlert(msg) {
-    alertDiv.textContent = msg;
-    alertDiv.classList.add('open');
-}
-function hideAlert() {
-    alertDiv.classList.remove('open');
-}
+
 function setStatus(msg) {
     let displayMsg = msg;
     if (msg.toLowerCase().includes('connecting')) {
@@ -200,7 +197,6 @@ function send_data(packet) {
 
 // --- Bluetooth Logic ---
 async function connectBluetooth() {
-    hideAlert();
     setStatus('Connecting');
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
     try {
@@ -253,7 +249,7 @@ async function connectBluetooth() {
         if (loadingOverlay) loadingOverlay.style.display = 'none';
     } catch (err) {
         console.error("Bluetooth connection error:", err);
-        showAlert("Bluetooth error: " + err);
+        showToast("Bluetooth error: " + err);
         setStatus('Disconnected');
         connected = false;
         connectBtn.textContent = "Connect";
@@ -420,7 +416,7 @@ async function sendCommand(packet) {
         await writeChar.writeValue(packet);
     } catch (err) {
         console.error("Failed to send command:", err);
-        showAlert("Failed to send command: " + err);
+        showToast("Failed to send command: " + err);
     }
 }
 
@@ -572,4 +568,63 @@ const restored = loadCurrentSession();
 if (restored && !sessionActive) {
     sessionActive = true;
     sessionStartData = restored;
+}
+
+// --- Import/Export History ---
+if (exportHistoryBtn) {
+    exportHistoryBtn.addEventListener('click', () => {
+        const sessions = loadSessions();
+        const blob = new Blob([JSON.stringify(sessions, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'treadmill_sessions.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+        showToast('History exported.');
+    });
+}
+
+if (importHistoryBtn && importHistoryInput) {
+    importHistoryBtn.addEventListener('click', () => {
+        importHistoryInput.value = '';
+        importHistoryInput.click();
+    });
+    importHistoryInput.addEventListener('change', (e) => {
+        const file = importHistoryInput.files && importHistoryInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const imported = JSON.parse(event.target.result);
+                if (Array.isArray(imported)) {
+                    saveSessions(imported);
+                    renderSessionTable();
+                    showToast('History imported successfully.');
+                } else {
+                    showToast('Invalid file format.');
+                }
+            } catch (err) {
+                showToast('Failed to import: ' + err);
+            }
+        };
+        reader.readAsText(file);
+    });
+}
+
+function showToast(message, timeout = 4000) {
+    if (snackbar && snackbar.MaterialSnackbar) {
+        snackbar.MaterialSnackbar.showSnackbar({ message, timeout });
+    } else if (snackbar) {
+        // fallback for late upgrade
+        snackbar.querySelector('.mdl-snackbar__text').textContent = message;
+        snackbar.classList.add('mdl-snackbar--active');
+        setTimeout(() => snackbar.classList.remove('mdl-snackbar--active'), timeout);
+    } else {
+        alert(message); // fallback
+    }
 }
